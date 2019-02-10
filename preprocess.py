@@ -72,6 +72,7 @@ def create_timeseries_batches(features, labels, sequence_length=20, sequence_sta
     print("initial features shape: ", features.shape)
 
     full_sequence_length = sequence_length * ((len(features) - n_sequences * sequence_start_shift) // sequence_length)
+    n_minibatches = full_sequence_length // sequence_length
     print("Full sequence length: ", full_sequence_length)
     # Trim initial sequence (alternative: padding)
     trimmed_length = sequence_length * (len(features) // sequence_length)
@@ -83,8 +84,8 @@ def create_timeseries_batches(features, labels, sequence_length=20, sequence_sta
     sequences_features = []
     sequences_labels = []
 
-    target_features_shape = [full_sequence_length // sequence_length, sequence_length, features.shape[-1]]
-    target_labels_shape = [full_sequence_length // sequence_length, sequence_length, labels.shape[-1]]
+    target_features_shape = [n_minibatches, sequence_length, features.shape[-1]]
+    target_labels_shape = [n_minibatches, sequence_length, labels.shape[-1]]
 
     for i in range(n_sequences):
         start_idx = i * sequence_start_shift
@@ -95,15 +96,27 @@ def create_timeseries_batches(features, labels, sequence_length=20, sequence_sta
         sequences_features += [np.array(features[start_idx: end_idx]).reshape(target_features_shape)]
         sequences_labels += [np.array(labels[start_idx: end_idx]).reshape(target_labels_shape)]
 
-    print("Features sequences shape: ", np.array(sequences_features).shape)
-    print("Labels sequences shape: ", np.array(sequences_labels).shape)
+    sequences_features = np.array(sequences_features)
+    sequences_labels = np.array(sequences_labels)
+
+    print("Features sequences shape: ", sequences_features.shape)
+    print("Labels sequences shape: ", sequences_labels.shape)
+
+    mini_batch_features_arr_shape = [n_minibatches * n_sequences, sequence_length, features.shape[-1]]
+    mini_batch_features = np.zeros(mini_batch_features_arr_shape)
+    mini_batch_labels_arr_shape = [n_minibatches * n_sequences, sequence_length, labels.shape[-1]]
+    mini_batch_labels = np.zeros(mini_batch_labels_arr_shape)
+    for i in range(n_minibatches):
+        for j in range(n_sequences):
+            mini_batch_features[i * n_sequences + j] = sequences_features[j, i]
+            mini_batch_labels[i * n_sequences + j] = sequences_labels[j, i]
+            print(i * n_sequences + j)
 
 
+    #feature_batch = np.transpose(np.array(sequences_features),[1, 0, 2 ,3]).reshape([-1, target_features_shape[1], target_features_shape[2]])
+    #label_batch = np.transpose(np.array(sequences_labels), [1, 0, 2, 3]).reshape([-1, target_labels_shape[1], target_labels_shape[2]])
 
-    feature_batch = np.transpose(np.array(sequences_features),[1, 0, 2 ,3]).reshape([-1, target_features_shape[1], target_features_shape[2]])
-    label_batch = np.transpose(np.array(sequences_labels), [1, 0, 2, 3]).reshape([-1, target_labels_shape[1], target_labels_shape[2]])
-
-    return feature_batch, label_batch
+    return mini_batch_features, mini_batch_labels
 
 
 def read_and_preprocess_data(in_file, batch_size=32):
@@ -114,7 +127,7 @@ def read_and_preprocess_data(in_file, batch_size=32):
     print("File {0} has {1} timesteps (hours)".format(in_file, labels.shape[0]))
 
     if batch_size > 1:
-        features, labels = create_timeseries_batches(features, labels)
+        features, labels = create_timeseries_batches(features, labels, n_sequences=batch_size)
     else:
         features = np.expand_dims(features, 0)
         labels = np.expand_dims(labels, 0)
