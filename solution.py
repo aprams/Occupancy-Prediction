@@ -35,7 +35,7 @@ def predict_next_24h(model, in_file):
     print(label_batch.shape)
 
 
-def model_predict_future_activation(current_time):
+def model_predict_future_activation(current_time, params):
     current_time = datetime.strptime(current_time, "%Y-%m-%d %H:%M:%S")
     features, labels, device_list = read_and_preprocess_data(in_file, current_time, batch_size=1)
 
@@ -43,11 +43,7 @@ def model_predict_future_activation(current_time):
     print("label batch: ", labels.shape)
     keras.losses.weighted_loss = dummy_weighted_loss
 
-    with open('params.json', 'r') as fp:
-        model_params = json.load(fp)
-        model_params['batch_size'] = 1
-
-    model = create_model(model_params)
+    model = create_model(params)
     model.load_weights('model.h5')
 
     predictions = np.squeeze(model.predict(features, batch_size=1))  # (n_timesteps, n_outputs)
@@ -61,7 +57,6 @@ def model_predict_future_activation(current_time):
     tmp_features = np.array(last_features)
     tmp_features = np.concatenate([tmp_features[:2], last_predictions])
     for i in range(24):
-        print(tmp_features)
         # print(tmp_prediction)
         tmp_prediction = model.predict(np.reshape(tmp_features, [1, 1, len(tmp_features)]))
         tmp_features = np.concatenate([tmp_features[:2], tmp_prediction[0, 0]])
@@ -101,6 +96,22 @@ if __name__ == '__main__':
 
     current_time, in_file, out_file = sys.argv[1:]
 
+    with open('params.json', 'r') as fp:
+        params = json.load(fp)
+        params['batch_size'] = 1
+
     previous_readings = pd.read_csv(in_file)
-    result = model_predict_future_activation(current_time)
-    result.to_csv(out_file)
+    result = model_predict_future_activation(current_time, params)
+
+    # Make 24 predictions for each hour starting at the next full hour
+    next_24_hours = pd.date_range(current_time, periods=24, freq='H').ceil('H')
+
+    # produce 24 hourly slots per device:
+    xproduct = list(itertools.product(next_24_hours, params['devices']))
+    predictions = pd.DataFrame(xproduct, columns=['time', 'device'])
+    predictions.set_index('time', inplace=True)
+
+    predictions['activation_predicted'] = np.ravel(result).astype(np.int32)
+    print(predictions['activation_predicted'])
+
+    predictions.to_csv(out_file)
