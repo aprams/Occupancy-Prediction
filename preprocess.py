@@ -62,7 +62,7 @@ def preprocess_features_and_labels(previous_readings, current_time=None):
     return (np_features, np_labels)
 
 
-def create_timeseries_batches(features, labels, sequence_length=20, sequence_start_shift=4,
+def create_timeseries_batches(features, labels, sequence_length=100, sequence_start_shift=30,
                               n_sequences=16):
     """
     Creates n_sequences shifted "stateful" sequences with each sequence having sequence_length elements
@@ -115,7 +115,6 @@ def create_timeseries_batches(features, labels, sequence_length=20, sequence_sta
         for j in range(n_sequences):
             mini_batch_features[i * n_sequences + j] = sequences_features[j, i]
             mini_batch_labels[i * n_sequences + j] = sequences_labels[j, i]
-            print(i * n_sequences + j)
 
 
     #feature_batch = np.transpose(np.array(sequences_features),[1, 0, 2 ,3]).reshape([-1, target_features_shape[1], target_features_shape[2]])
@@ -126,7 +125,9 @@ def create_timeseries_batches(features, labels, sequence_length=20, sequence_sta
 
 def read_and_preprocess_data(in_file, current_time=None, batch_size=32):
     previous_readings = pd.read_csv(in_file)
+
     previous_readings['time'] = pd.to_datetime(previous_readings['time'])
+
 
     features, labels = preprocess_features_and_labels(previous_readings, current_time)
     print("File {0} has {1} timesteps (hours) until {2}".format(in_file, labels.shape[0],

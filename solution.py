@@ -15,10 +15,10 @@ import keras.losses
 import json
 
 
-
 def dummy_weighted_loss(y_true, y_pred):
     out = -(y_true * K.log(y_pred + 1e-5) + (1.0 - y_true) * K.log(1.0 - y_pred + 1e-5))
     return K.mean(out, axis=-1)
+
 
 def create_model(params):
     model = Sequential()
@@ -35,16 +35,13 @@ def predict_next_24h(model, in_file):
     print(label_batch.shape)
 
 
-def model_predict_future_activation(current_time, params):
+def model_predict_future_activation(in_file, model, params, current_time):
     current_time = datetime.strptime(current_time, "%Y-%m-%d %H:%M:%S")
     features, labels, device_list = read_and_preprocess_data(in_file, current_time, batch_size=1)
 
     print("Feature batch: ", features.shape)
     print("label batch: ", labels.shape)
     keras.losses.weighted_loss = dummy_weighted_loss
-
-    model = create_model(params)
-    model.load_weights('model.h5')
 
     predictions = np.squeeze(model.predict(features, batch_size=1))  # (n_timesteps, n_outputs)
     print(predictions.shape)
@@ -92,6 +89,27 @@ def predict_future_activation(current_time, previous_readings):
     return predictions
 
 
+def predict(in_file, model, params, current_time=None):
+    if current_time is None:
+        # Use last element of data as current time
+        previous_readings = pd.read_csv(in_file)
+        current_time = previous_readings['time'].iloc[-1]
+    result = model_predict_future_activation(in_file, model, params, current_time)
+
+    # Make 24 predictions for each hour starting at the next full hour
+    next_24_hours = pd.date_range(current_time, periods=24, freq='H').ceil('H')
+
+    # produce 24 hourly slots per device:
+    xproduct = list(itertools.product(next_24_hours, params['devices']))
+    predictions = pd.DataFrame(xproduct, columns=['time', 'device'])
+    predictions.set_index(['time', 'device'], inplace=True)
+
+    predictions['activation_predicted'] = np.ravel(result).astype(np.int32)
+    print(predictions['activation_predicted'])
+
+    return predictions
+
+
 if __name__ == '__main__':
 
     current_time, in_file, out_file = sys.argv[1:]
@@ -100,18 +118,10 @@ if __name__ == '__main__':
         params = json.load(fp)
         params['batch_size'] = 1
 
-    previous_readings = pd.read_csv(in_file)
-    result = model_predict_future_activation(current_time, params)
+    model = create_model(params)
+    model.load_weights('model.h5')
 
-    # Make 24 predictions for each hour starting at the next full hour
-    next_24_hours = pd.date_range(current_time, periods=24, freq='H').ceil('H')
 
-    # produce 24 hourly slots per device:
-    xproduct = list(itertools.product(next_24_hours, params['devices']))
-    predictions = pd.DataFrame(xproduct, columns=['time', 'device'])
-    predictions.set_index('time', inplace=True)
-
-    predictions['activation_predicted'] = np.ravel(result).astype(np.int32)
-    print(predictions['activation_predicted'])
-
+    predictions = predict(in_file, model, params, current_time)
     predictions.to_csv(out_file)
+

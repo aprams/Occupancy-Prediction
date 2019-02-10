@@ -2,15 +2,15 @@ import os
 import urllib
 import keras
 import numpy as np
-import training
-import nail_model
 import json
 import scipy
+import datetime
 import matplotlib.pyplot as plt
-from keras.preprocessing import image
 from flask import Flask, request, redirect, flash, url_for, Session
 from werkzeug.utils import secure_filename
-from keras.applications.mobilenetv2 import preprocess_input
+from solution import create_model, predict
+import tensorflow as tf
+
 
 # Upload settings
 UPLOAD_FOLDER = '/uploads'
@@ -27,54 +27,19 @@ app.config['SESSION_TYPE'] = 'filesystem'
 app.secret_key = '07145d5b193b4d3b909f218bccd65be7'
 
 # Training args
-with open(os.path.join(training.MODEL_SAVE_DIR, training.CONFIG_FILE_NAME), 'r') as f:
-    model_args = json.load(f)
-    image_size = int(model_args['image_size'])
+with open('params.json', encoding='utf-8') as f:
+    params = json.load(f)
+    params['batch_size'] = 1
 
-# Model loading
-top_model, graph = nail_model.get_top_model()
-top_model.load_weights(os.path.join(model_args['model_save_dir'], model_args['model_filename']))
-with graph.as_default():
-    extractor_model = nail_model.get_extractor_model(image_size)
+model = create_model(params)
+model.load_weights('model.h5')
 
-
-def predict(file_path):
-    _, file_ext = os.path.splitext(file_path)
-    img = scipy.misc.imresize(plt.imread(file_path, format=file_ext), (image_size, image_size))
-    img = np.array(img, dtype=np.float32)
-    if img.shape[-1] < 3 or len(img.shape) != 3:
-        img = np.stack((img,)*3, -1)
-    img = np.expand_dims(img, axis=0)
-    if img.shape[-1] == 4:
-        img = img[:, :, :, :-1]
-    img = preprocess_input(img)
-    with graph.as_default():
-        bottleneck_features = extractor_model.predict(img)
-        result = top_model.predict(bottleneck_features)
-    return result[0][0]
-
+global graph
+graph = tf.get_default_graph()
 
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-
-@app.route('/predict', methods=['GET', 'POST'])
-def predict_endpoint():
-    if request.method == 'GET':
-        if 'image_url' in request.args:
-            image_url = request.args['image_url']
-            filename = secure_filename(image_url[image_url.rfind("/")+1:])
-            target_file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            urllib.request.urlretrieve(image_url, target_file_path)
-            json_result = {}
-            prediction = predict(target_file_path)
-            json_result['result'] = 'good' if prediction > DECISION_THRESHOLD else 'bad'
-            json_result['sigmoid_output'] = str(prediction)
-            return json.dumps(json_result)
-    else:
-        return ''
-
 
 @app.route('/upload_predict', methods=['GET', 'POST'])
 def upload_file_endpoint():
@@ -93,11 +58,13 @@ def upload_file_endpoint():
             filename = secure_filename(file.filename)
             target_file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(os.path.join(target_file_path))
-            json_result = {}
-            prediction = predict(target_file_path)
-            json_result['result'] = 'good' if prediction > DECISION_THRESHOLD else 'bad'
-            json_result['sigmoid_output'] = str(prediction)
-            return json.dumps(json_result)
+            global graph
+            print("Starting prediction")
+            with graph.as_default():
+                predictions = predict(in_file=target_file_path, model=model, params=params, current_time=None)
+            print("Finished prediction")
+            print(predictions)
+            return json.dumps(predictions.to_json())
     return '''
     <!doctype html>
     <title>Upload new File</title>
