@@ -6,11 +6,8 @@ import sys
 
 def preallocate_features(previous_readings):
     device_list = sorted(previous_readings.device.unique())
-    n_devices = len(device_list)
-    print('n_devices = ', n_devices)
-    tmp_time_stamp = first_time_stamp = pd.to_datetime(previous_readings['time'][0])
 
-    unique_hour_date_times = [first_time_stamp.replace(minute=0, second=0)]
+    first_time_stamp = pd.to_datetime(previous_readings['time'][0])
 
     hour_interval_start_end = pd.date_range(first_time_stamp.replace(minute=0, second=0),
                                             previous_readings['time'][len(previous_readings) - 1].replace(minute=0,
@@ -75,6 +72,7 @@ def read_and_preprocess_data(in_file, batch=True):
     previous_readings['time'] = pd.to_datetime(previous_readings['time'])
 
     features, labels = preprocess_features_and_labels(previous_readings)
+    print("File {0} has {1} timesteps (hours)".format(in_file, labels.shape[0]))
 
     if batch:
         features, labels = create_timeseries_batches(features, labels)
