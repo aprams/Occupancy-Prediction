@@ -20,7 +20,7 @@ def preallocate_features(previous_readings):
     return features
 
 
-def preprocess_features_and_labels(previous_readings):
+def preprocess_features_and_labels(previous_readings, current_time=None):
     """
     Generate features so that we have an array with dimensions [T, n_devices]
     T: time
@@ -28,16 +28,21 @@ def preprocess_features_and_labels(previous_readings):
     """
 
     device_list = sorted(previous_readings.device.unique())
+    current_time = None
+    if current_time is not None:
+        n_elements_before_now = len(previous_readings[previous_readings['time'] < current_time])
+        previous_readings_truncated = previous_readings[:n_elements_before_now]
+    else:
+        previous_readings_truncated = previous_readings
 
     # We preallocate to avoid many appends (append copies according to pandas docs, might become an issue/slow for large data)
-    features = preallocate_features(previous_readings)
+    features = preallocate_features(previous_readings_truncated)
     labels = pd.DataFrame(0, index=np.arange(len(features) - 1),
                           columns=device_list)
 
-    for index, row in previous_readings.iterrows():
+    for index, row in previous_readings_truncated.iterrows():
         if index == 0:
             continue
-
         dt = row['time'].replace(minute=0, second=0)
         feature_idx = features.index[features['time'] == dt]
         # Increment device's counter at time
@@ -119,12 +124,13 @@ def create_timeseries_batches(features, labels, sequence_length=20, sequence_sta
     return mini_batch_features, mini_batch_labels
 
 
-def read_and_preprocess_data(in_file, batch_size=32):
+def read_and_preprocess_data(in_file, current_time=None, batch_size=32):
     previous_readings = pd.read_csv(in_file)
     previous_readings['time'] = pd.to_datetime(previous_readings['time'])
 
-    features, labels = preprocess_features_and_labels(previous_readings)
-    print("File {0} has {1} timesteps (hours)".format(in_file, labels.shape[0]))
+    features, labels = preprocess_features_and_labels(previous_readings, current_time)
+    print("File {0} has {1} timesteps (hours) until {2}".format(in_file, labels.shape[0],
+                                                                current_time if current_time is not None else "now"))
 
     if batch_size > 1:
         features, labels = create_timeseries_batches(features, labels, n_sequences=batch_size)

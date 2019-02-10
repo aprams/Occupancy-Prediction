@@ -4,17 +4,75 @@ import pandas as pd
 import sys
 
 from keras.models import load_model
+from preprocess import read_and_preprocess_data
+from datetime import datetime
+from keras.models import Sequential, load_model
+from keras.layers import Dense, Activation, Dropout
+from keras.layers import LSTM
+from keras import objectives
+from keras import backend as K
+import keras.losses
+import json
 
-def model_predict_future_activation():
-    feature_batch, label_batch, device_list = read_and_preprocess_data(in_file)
-    model = load_model('model.h5')
 
-    print(test_feature_batch_expanded.shape)
-    predictions = model.predict(test_feature_batch_expanded, batch_size=1)[:, 0, :]
-    # print(np.round(predictions, 1))
 
+def dummy_weighted_loss(y_true, y_pred):
+    out = -(y_true * K.log(y_pred + 1e-5) + (1.0 - y_true) * K.log(1.0 - y_pred + 1e-5))
+    return K.mean(out, axis=-1)
+
+def create_model(params):
+    model = Sequential()
+    model.add(LSTM(params['lstm_units'], batch_input_shape=(params['batch_size'], None, params['n_features']), return_sequences=True, stateful=True))
+    model.add(Dropout(params['dropout']))
+    model.add(Dense(params['n_outputs'], activation='sigmoid'))
+    model.compile(loss=dummy_weighted_loss if params['use_weighted_loss'] else 'binary_crossentropy', optimizer=params['optimizer'])
+    return model
+
+
+def predict_next_24h(model, in_file):
+    feature_batch, label_batch, device_list = read_and_preprocess_data(in_file, batch_size=1)
+    print(feature_batch.shape)
+    print(label_batch.shape)
+
+
+def model_predict_future_activation(current_time):
+    current_time = datetime.strptime(current_time, "%Y-%m-%d %H:%M:%S")
+    features, labels, device_list = read_and_preprocess_data(in_file, current_time, batch_size=1)
+
+    print("Feature batch: ", features.shape)
+    print("label batch: ", labels.shape)
+    keras.losses.weighted_loss = dummy_weighted_loss
+
+    with open('params.json', 'r') as fp:
+        model_params = json.load(fp)
+        model_params['batch_size'] = 1
+
+    model = create_model(model_params)
+    model.load_weights('model.h5')
+
+    predictions = np.squeeze(model.predict(features, batch_size=1))  # (n_timesteps, n_outputs)
     print(predictions.shape)
-    print(test_label_batch_flattened.shape)
+
+    all_predictions = []
+
+    last_features = np.squeeze(features)[-1]
+    last_predictions = tmp_prediction = predictions[-1]
+
+    tmp_features = np.array(last_features)
+    tmp_features = np.concatenate([tmp_features[:2], last_predictions])
+    for i in range(24):
+        print(tmp_features)
+        # print(tmp_prediction)
+        tmp_prediction = model.predict(np.reshape(tmp_features, [1, 1, len(tmp_features)]))
+        tmp_features = np.concatenate([tmp_features[:2], tmp_prediction[0, 0]])
+
+        # Increment time features
+        if tmp_features[1] == 23:
+            tmp_features[0] = (tmp_features[0] + 1) % 7
+        tmp_features[1] = (tmp_features[1] + 1) % 24
+        all_predictions += [tmp_prediction]
+
+    return np.round(np.concatenate(all_predictions))
 
 
 def predict_future_activation(current_time, previous_readings):
@@ -44,5 +102,5 @@ if __name__ == '__main__':
     current_time, in_file, out_file = sys.argv[1:]
 
     previous_readings = pd.read_csv(in_file)
-    result = predict_future_activation(current_time, previous_readings)
+    result = model_predict_future_activation(current_time)
     result.to_csv(out_file)
