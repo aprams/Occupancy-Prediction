@@ -73,8 +73,8 @@ def preprocess_features_and_labels(previous_readings, end_time=None, device_list
         feature_idx = features.index[features['time'] == dt]
         # Set device's activation at time to 1
         features.loc[feature_idx, row['device']] = 1
-        if feature_idx < len(features.index) - 1:
-            labels.loc[feature_idx, row['device']] = 1
+        if feature_idx >= 2:
+            labels.loc[feature_idx - 2, row['device']] = 1
         cur_hour_of_week = row['time'].weekday() * 24 + row['time'].hour
         mean_occupancy_per_hour.loc[(cur_hour_of_week, row['device']), 'mean_occupancy'] += 1 / (n_hours_in_data / 24)
 
@@ -91,6 +91,8 @@ def preprocess_features_and_labels(previous_readings, end_time=None, device_list
 
     np_features = features.to_numpy()[1:]
     np_labels = labels.to_numpy()
+    print(np_features[:10])
+    print(np_labels[:10])
 
     return np_features, np_labels, mean_occupancy_per_hour
 
@@ -154,7 +156,7 @@ def create_timeseries_batches(features, labels, sequence_length, sequence_start_
     return mini_batch_features, mini_batch_labels
 
 
-def read_and_preprocess_data(in_file, current_time=None, batch_size=32, sequence_start_shift=20, sequence_length=50,
+def read_and_preprocess_data(in_file, current_time=None, batch_size=32, sequence_start_shift=20, sequence_length=100,
                              device_list=None):
     """
     Reads in :param in_file: up to :param current_time:, generates the features (and batches if specified) and returns
