@@ -16,11 +16,23 @@ import json
 
 
 def dummy_weighted_loss(y_true, y_pred):
+    """
+    If we use a custom loss, keras needs that for inference as well. Here we don't weight, so we don't need the global
+    variable, but we don't use the loss anyways, so it doesn't matter.
+    :param y_true:
+    :param y_pred:
+    :return:
+    """
     out = -(y_true * K.log(y_pred + 1e-5) + (1.0 - y_true) * K.log(1.0 - y_pred + 1e-5))
     return K.mean(out, axis=-1)
 
 
 def create_model(params):
+    """
+    Creates an LSTM-based model given the parameters: 'lr', 'do', 'reg', 'lstm_units', 'n_outputs', 'n_features', 'use_weighted_loss'.
+    :param params: model parameters as dict
+    :return: Keras LSTM model
+    """
     model = Sequential()
     model.add(LSTM(params['lstm_units'], batch_input_shape=(params['batch_size'], None, params['n_features']), return_sequences=True, stateful=True))
     model.add(Dropout(params['dropout']))
@@ -30,6 +42,15 @@ def create_model(params):
 
 
 def model_predict_future_activation(in_file, model, params, current_time):
+    """
+    Predict the next 24h for a given model and in_file (up to current_time) using the specified params
+    :param in_file: input file
+    :param model: model to predict with
+    :param params: parameter
+    :param current_time: time to read up to
+    :return: Predicted future activations as numpy array of shape [24, params['n_outputs']]
+    """
+
     current_time = datetime.strptime(current_time, "%Y-%m-%d %H:%M:%S")
     features, labels, device_list = read_and_preprocess_data(in_file, current_time, batch_size=1)
 
@@ -62,6 +83,14 @@ def model_predict_future_activation(in_file, model, params, current_time):
 
 
 def predict(in_file, model, params, current_time=None):
+    """
+    Wraps the 24h prediction and returns it in a pandas dataframe
+    :param in_file: 
+    :param model:
+    :param params:
+    :param current_time:
+    :return: dataframe containing the predicted activations
+    """
     if current_time is None:
         # Use last element of data as current time
         previous_readings = pd.read_csv(in_file)
