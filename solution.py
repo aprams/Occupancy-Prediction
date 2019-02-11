@@ -59,9 +59,6 @@ def model_predict_future_activation(in_file, model, params, current_time, mean_o
     print(current_time)
     features, labels, device_list, _ = read_and_preprocess_data(in_file, current_time, batch_size=1)
 
-    print("Features times: ", features[0, :, :2])
-    print("Feature batch: ", features.shape)
-    print("label batch: ", labels.shape)
     keras.losses.weighted_loss = dummy_weighted_loss
 
     predictions = np.squeeze(model.predict(features, batch_size=1))  # (n_timesteps, n_outputs)
@@ -77,7 +74,6 @@ def model_predict_future_activation(in_file, model, params, current_time, mean_o
     tmp_mean_occupancies = [mean_occupancies.loc[(tmp_features[0] * 24 + tmp_features[1], 'device_' + str(i + 1)),
                                                  'mean_occupancy'] for i in range(len(device_list))]
 
-    print("Last features: ", last_features)
     tmp_features = np.concatenate([tmp_features[:2], last_predictions, tmp_mean_occupancies])
     for i in range(24):
 
@@ -127,7 +123,6 @@ def predict(in_file, model, params, current_time=None, mean_occupancies=None):
     predictions.set_index(['time', 'device'], inplace=True)
 
     predictions['activation_predicted'] = np.ravel(result).astype(np.int32)
-    print(predictions['activation_predicted'])
 
     return predictions
 
