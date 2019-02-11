@@ -63,7 +63,6 @@ def upload_file_endpoint():
             with graph.as_default():
                 predictions = predict(in_file=target_file_path, model=model, params=params, current_time=None)
             print("Finished prediction")
-            print(predictions)
             return json.dumps(predictions.to_json())
     return '''
     <!doctype html>
