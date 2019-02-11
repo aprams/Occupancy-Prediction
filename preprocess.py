@@ -4,8 +4,7 @@ import pandas as pd
 import sys
 
 
-def preallocate_features(previous_readings):
-    device_list = sorted(previous_readings.device.unique())
+def preallocate_features(previous_readings, device_list):
 
     first_time_stamp = pd.to_datetime(previous_readings['time'][0])
 
@@ -20,34 +19,34 @@ def preallocate_features(previous_readings):
     return features
 
 
-def preprocess_features_and_labels(previous_readings, current_time=None):
+def preprocess_features_and_labels(previous_readings, start_time=None, end_time=None, device_list=None):
     """
     Generate features so that we have an array with dimensions [T, n_devices]
     T: time
     n_devices: number of devices
     """
 
-    device_list = sorted(previous_readings.device.unique())
-    current_time = None
-    if current_time is not None:
-        n_elements_before_now = len(previous_readings[previous_readings['time'] < current_time])
+    device_list = sorted(previous_readings.device.unique()) if device_list is None else device_list
+    if end_time is not None:
+        n_elements_before_now = len(previous_readings[previous_readings['time'] < end_time])
         previous_readings_truncated = previous_readings[:n_elements_before_now]
     else:
         previous_readings_truncated = previous_readings
 
     # We preallocate to avoid many appends (append copies according to pandas docs, might become an issue/slow for large data)
-    features = preallocate_features(previous_readings_truncated)
+    features = preallocate_features(previous_readings_truncated, device_list)
     labels = pd.DataFrame(0, index=np.arange(len(features) - 1),
                           columns=device_list)
 
     for index, row in previous_readings_truncated.iterrows():
-        if index == 0:
-            continue
         dt = row['time'].replace(minute=0, second=0)
         feature_idx = features.index[features['time'] == dt]
         # Increment device's counter at time
         features.loc[feature_idx, row['device']] = 1
-        labels.loc[feature_idx - 1, row['device']] = 1
+        # TODO: Correct - 1??
+
+        if feature_idx > 0:
+            labels.loc[feature_idx - 1, row['device']] = 1
 
     # Second loop, can we improve here?
     for index, row in features.iterrows():
@@ -62,7 +61,7 @@ def preprocess_features_and_labels(previous_readings, current_time=None):
     return (np_features, np_labels)
 
 
-def create_timeseries_batches(features, labels, sequence_length=100, sequence_start_shift=30,
+def create_timeseries_batches(features, labels, sequence_length, sequence_start_shift=10,
                               n_sequences=16):
     """
     Creates n_sequences shifted "stateful" sequences with each sequence having sequence_length elements
@@ -94,7 +93,7 @@ def create_timeseries_batches(features, labels, sequence_length=100, sequence_st
 
     for i in range(n_sequences):
         start_idx = i * sequence_start_shift
-        end_idx = trimmed_length - (n_sequences - i - 1) * sequence_start_shift
+        end_idx = start_idx + full_sequence_length#trimmed_length - (n_sequences - i - 1) * sequence_start_shift
         print("Sequence {0} has start index {1} and end index {2}".format(i, start_idx, end_idx))
 
         print(np.array(features[start_idx: end_idx]).shape)
@@ -123,18 +122,21 @@ def create_timeseries_batches(features, labels, sequence_length=100, sequence_st
     return mini_batch_features, mini_batch_labels
 
 
-def read_and_preprocess_data(in_file, current_time=None, batch_size=32):
+def read_and_preprocess_data(in_file, current_time=None, batch_size=32, sequence_start_shift=10, sequence_length=25,
+                             test_split=0.0, device_list=None):
     previous_readings = pd.read_csv(in_file)
 
     previous_readings['time'] = pd.to_datetime(previous_readings['time'])
 
 
-    features, labels = preprocess_features_and_labels(previous_readings, current_time)
+    features, labels = preprocess_features_and_labels(previous_readings, current_time, device_list=None)
     print("File {0} has {1} timesteps (hours) until {2}".format(in_file, labels.shape[0],
                                                                 current_time if current_time is not None else "now"))
 
     if batch_size > 1:
-        features, labels = create_timeseries_batches(features, labels, n_sequences=batch_size)
+        features, labels = create_timeseries_batches(features, labels, n_sequences=batch_size,
+                                                     sequence_start_shift=sequence_start_shift,
+                                                     sequence_length=sequence_length)
     else:
         features = np.expand_dims(features, 0)
         labels = np.expand_dims(labels, 0)

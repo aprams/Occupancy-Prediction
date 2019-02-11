@@ -29,12 +29,6 @@ def create_model(params):
     return model
 
 
-def predict_next_24h(model, in_file):
-    feature_batch, label_batch, device_list = read_and_preprocess_data(in_file, batch_size=1)
-    print(feature_batch.shape)
-    print(label_batch.shape)
-
-
 def model_predict_future_activation(in_file, model, params, current_time):
     current_time = datetime.strptime(current_time, "%Y-%m-%d %H:%M:%S")
     features, labels, device_list = read_and_preprocess_data(in_file, current_time, batch_size=1)
@@ -65,28 +59,6 @@ def model_predict_future_activation(in_file, model, params, current_time):
         all_predictions += [tmp_prediction]
 
     return np.round(np.concatenate(all_predictions))
-
-
-def predict_future_activation(current_time, previous_readings):
-    """
-    This function predicts future hourly activation given previous sensings.
-    """
-    # make predictable
-    np.random.seed(len(previous_readings))
-
-    # Make 24 predictions for each hour starting at the next full hour
-    next_24_hours = pd.date_range(current_time, periods=24, freq='H').ceil('H')
-
-    device_names = sorted(previous_readings.device.unique())
-
-    # produce 24 hourly slots per device:
-    xproduct = list(itertools.product(next_24_hours, device_names))
-    predictions = pd.DataFrame(xproduct, columns=['time', 'device'])
-    predictions.set_index('time', inplace=True)
-
-    # Random guess!
-    predictions['activation_predicted'] = np.random.randint(2, size=len(predictions))
-    return predictions
 
 
 def predict(in_file, model, params, current_time=None):
