@@ -84,7 +84,7 @@ def model_predict_future_activation(in_file, model, params, current_time, mean_o
         tmp_mean_occupancies = [mean_occupancies.loc[(tmp_features[0] * 24 + tmp_features[1], 'device_' + str(j + 1)),
                                                      'mean_occupancy'] for j in range(len(device_list))]
 
-        tmp_features = np.concatenate([tmp_features[:2], tmp_prediction[0, 0], tmp_mean_occupancies])
+        tmp_features = np.concatenate([tmp_features[:2], np.squeeze(tmp_prediction), tmp_mean_occupancies])
 
         print(tmp_features)
 
