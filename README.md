@@ -10,6 +10,7 @@ These instructions will get you a copy of the project up and running on your loc
 
 For training a new network you will need python3 and for the inference server a Dockerfile is provided. Running that on your own is possible, but Docker is recommended.
 
+Make sure to also pull the git-lfs files if you plan to use the sample dataset!
 
 ### Installing
 
