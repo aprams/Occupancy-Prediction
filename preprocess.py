@@ -5,7 +5,7 @@ import sys
 import datetime
 
 
-def preallocate_features(previous_readings, device_list):
+def preallocate_features(previous_readings, device_list, current_time=None):
     """
     Preallocate a dataframe for the features, so we do not append the single rows
     :param previous_readings: input from file as dataframe
@@ -16,10 +16,15 @@ def preallocate_features(previous_readings, device_list):
 
     first_time_stamp = pd.to_datetime(previous_readings['time'][0])
 
-    hour_interval_start_end = pd.date_range(first_time_stamp.replace(minute=0, second=0),
-                                            previous_readings['time'][len(previous_readings) - 1].replace(minute=0,
-                                                                                                          second=0),
-                                            freq='H')
+    end_time = previous_readings['time'][len(previous_readings) - 1].replace(minute=0, second=0) if current_time is None \
+        else current_time
+
+    print("PREALLOCATE END TIME: ", current_time)
+
+    hour_interval_start_end = pd.date_range(first_time_stamp.replace(minute=0, second=0), end_time, freq='H')
+
+
+    print("PREALLOCATE hour_interval_start_end: ", hour_interval_start_end)
 
     features = pd.DataFrame(0, index=np.arange(len(hour_interval_start_end)),
                             columns=['time', 'weekday', 'hour'] + device_list + [x + "_mean_occ" for x in device_list])
@@ -47,7 +52,7 @@ def preprocess_features_and_labels(previous_readings, end_time=None, device_list
         previous_readings_truncated = previous_readings
 
     # We preallocate to avoid many appends (append copies according to pandas docs, might become an issue/slow for large data)
-    features = preallocate_features(previous_readings_truncated, device_list)
+    features = preallocate_features(previous_readings_truncated, device_list, current_time=end_time)
     labels = pd.DataFrame(0, index=np.arange(len(features) - 1),
                           columns=device_list)
 
@@ -66,10 +71,10 @@ def preprocess_features_and_labels(previous_readings, end_time=None, device_list
     for index, row in previous_readings_truncated.iterrows():
         dt = row['time'].replace(minute=0, second=0)
         feature_idx = features.index[features['time'] == dt]
-        # Increment device's counter at time
+        # Set device's activation at time to 1
         features.loc[feature_idx, row['device']] = 1
-        if feature_idx > 0:
-            labels.loc[feature_idx - 1, row['device']] = 1
+        if feature_idx < len(features.index) - 1:
+            labels.loc[feature_idx, row['device']] = 1
         cur_hour_of_week = row['time'].weekday() * 24 + row['time'].hour
         mean_occupancy_per_hour.loc[(cur_hour_of_week, row['device']), 'mean_occupancy'] += 1 / (n_hours_in_data / 24)
 
@@ -84,7 +89,7 @@ def preprocess_features_and_labels(previous_readings, end_time=None, device_list
 
     features.drop('time', axis=1, inplace=True)
 
-    np_features = features.to_numpy()[:-1]
+    np_features = features.to_numpy()[1:]
     np_labels = labels.to_numpy()
 
     return np_features, np_labels, mean_occupancy_per_hour
@@ -149,7 +154,7 @@ def create_timeseries_batches(features, labels, sequence_length, sequence_start_
     return mini_batch_features, mini_batch_labels
 
 
-def read_and_preprocess_data(in_file, current_time=None, batch_size=32, sequence_start_shift=10, sequence_length=25,
+def read_and_preprocess_data(in_file, current_time=None, batch_size=32, sequence_start_shift=20, sequence_length=50,
                              device_list=None):
     """
     Reads in :param in_file: up to :param current_time:, generates the features (and batches if specified) and returns
@@ -167,7 +172,7 @@ def read_and_preprocess_data(in_file, current_time=None, batch_size=32, sequence
     previous_readings['time'] = pd.to_datetime(previous_readings['time'])
 
 
-    features, labels, mean_occupancies = preprocess_features_and_labels(previous_readings, current_time, device_list=device_list)
+    features, labels, mean_occupancies = preprocess_features_and_labels(previous_readings, end_time=current_time, device_list=device_list)
     print("File {0} has {1} timesteps (hours) until {2}".format(in_file, labels.shape[0],
                                                                 current_time if current_time is not None else "now"))
 
