@@ -1,1 +1,1 @@
-{"lr": 0.001, "use_weighted_loss": true, "batch_size": 32, "dropout": 0.0, "epochs": 250, "n_outputs": 7, "n_features": 16, "lstm_units": 128, "devices": ["device_1", "device_2", "device_3", "device_4", "device_5", "device_6", "device_7"], "reg": 0.0}
+{"lr": 0.001, "use_weighted_loss": true, "batch_size": 4, "dropout": 0.0, "epochs": 250, "n_outputs": 7, "n_features": 16, "lstm_units": 128, "devices": ["device_1", "device_2", "device_3", "device_4", "device_5", "device_6", "device_7"], "reg": 0.0}

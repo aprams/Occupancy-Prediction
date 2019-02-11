@@ -19,12 +19,7 @@ def preallocate_features(previous_readings, device_list, current_time=None):
     end_time = previous_readings['time'][len(previous_readings) - 1].replace(minute=0, second=0) if current_time is None \
         else current_time
 
-    print("PREALLOCATE END TIME: ", current_time)
-
     hour_interval_start_end = pd.date_range(first_time_stamp.replace(minute=0, second=0), end_time, freq='H')
-
-
-    print("PREALLOCATE hour_interval_start_end: ", hour_interval_start_end)
 
     features = pd.DataFrame(0, index=np.arange(len(hour_interval_start_end)),
                             columns=['time', 'weekday', 'hour'] + device_list + [x + "_mean_occ" for x in device_list])
@@ -68,6 +63,7 @@ def preprocess_features_and_labels(previous_readings, end_time=None, device_list
 
     print("Hours in data: ", n_hours_in_data)
 
+    # Iterate over sensor readings to create hourly buckets of activations
     for index, row in previous_readings_truncated.iterrows():
         dt = row['time'].replace(minute=0, second=0)
         feature_idx = features.index[features['time'] == dt]
@@ -78,7 +74,8 @@ def preprocess_features_and_labels(previous_readings, end_time=None, device_list
         cur_hour_of_week = row['time'].weekday() * 24 + row['time'].hour
         mean_occupancy_per_hour.loc[(cur_hour_of_week, row['device']), 'mean_occupancy'] += 1 / (n_hours_in_data / 24)
 
-    # Second loop, can we improve here?
+    # Updates workday, hour and mean_occupancy features
+    # Second loop, can we improve performance by merging loops?
     for index, row in features.iterrows():
         features.loc[index, 'weekday'] = row['time'].weekday()
         features.loc[index, 'hour'] = row['time'].hour
@@ -91,8 +88,6 @@ def preprocess_features_and_labels(previous_readings, end_time=None, device_list
 
     np_features = features.to_numpy()[1:]
     np_labels = labels.to_numpy()
-    print(np_features[:10])
-    print(np_labels[:10])
 
     return np_features, np_labels, mean_occupancy_per_hour
 
@@ -113,6 +108,7 @@ def create_timeseries_batches(features, labels, sequence_length, sequence_start_
     """
     print("initial features shape: ", features.shape)
 
+    # Parameter calculation
     full_sequence_length = sequence_length * ((len(features) - n_sequences * sequence_start_shift) // sequence_length)
     n_minibatches = full_sequence_length // sequence_length
     print("Full sequence length: ", full_sequence_length)
@@ -129,6 +125,7 @@ def create_timeseries_batches(features, labels, sequence_length, sequence_start_
     target_features_shape = [n_minibatches, sequence_length, features.shape[-1]]
     target_labels_shape = [n_minibatches, sequence_length, labels.shape[-1]]
 
+    # First create subsequences
     for i in range(n_sequences):
         start_idx = i * sequence_start_shift
         end_idx = start_idx + full_sequence_length#trimmed_length - (n_sequences - i - 1) * sequence_start_shift
@@ -144,6 +141,7 @@ def create_timeseries_batches(features, labels, sequence_length, sequence_start_
     print("Features sequences shape: ", sequences_features.shape)
     print("Labels sequences shape: ", sequences_labels.shape)
 
+    # Merge sequences by interleaving them batchwise for stateful training
     mini_batch_features_arr_shape = [n_minibatches * n_sequences, sequence_length, features.shape[-1]]
     mini_batch_features = np.zeros(mini_batch_features_arr_shape)
     mini_batch_labels_arr_shape = [n_minibatches * n_sequences, sequence_length, labels.shape[-1]]
