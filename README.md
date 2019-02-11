@@ -1,4 +1,4 @@
-# Small Data Classification
+# Occupancy Prediction
 
 This project predicts occupancy on historical data for a sample dataset.
 
