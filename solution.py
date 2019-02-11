@@ -85,7 +85,7 @@ def model_predict_future_activation(in_file, model, params, current_time):
 def predict(in_file, model, params, current_time=None):
     """
     Wraps the 24h prediction and returns it in a pandas dataframe
-    :param in_file: 
+    :param in_file:
     :param model:
     :param params:
     :param current_time:
